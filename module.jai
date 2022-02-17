@@ -7,7 +7,6 @@ Redis :: struct {
     socket:     s32;
     host:       string;
     port:       u16;
-
 }
 
 init :: (redis: *Redis, host: string, port: u16) -> bool {
@@ -26,7 +25,7 @@ init :: (redis: *Redis, host: string, port: u16) -> bool {
     // assign IP, PORT
     servaddr.sin_family = AF_INET;
     addr := to_c_string(host);
-    servaddr.sin_addr = inet_addr(addr);
+    servaddr.sin_addr.s_addr = inet_addr(addr);
     servaddr.sin_port = htons(port);
 
     // connect the client socket to server socket

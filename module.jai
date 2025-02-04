@@ -4,43 +4,64 @@
 #load "resp.jai";
 
 Redis :: struct {
-    socket:     s32;
+    socket:     Socket;
     host:       string;
     port:       u16;
 }
 
-init :: (redis: *Redis, host: string, port: u16) -> bool {
-    servaddr, cli : sockaddr_in;
-
+init :: (redis: *Redis, host: string, port: u16, user: string = "default", password: string = "") -> bool {
+    socket_init();
+    
     redis.host = host;
     redis.port = port;
-    redis.socket = socket(AF_INET, SOCK_STREAM, 0);
-    if redis.socket == -1 {
-        print("socket creation failed...\n");
+    redis.socket = socket(AF_INET, .SOCK_STREAM, .TCP);
+    if redis.socket < 0 {
+        log("Failed to create socket for redis.\n");
         return false;
     }
 
+    servaddr : sockaddr_in;
     memset(*servaddr, 0, size_of(sockaddr_in));
 
     // assign IP, PORT
     servaddr.sin_family = AF_INET;
-    addr := to_c_string(host);
-    servaddr.sin_addr.s_addr = inet_addr(addr);
+    servaddr.sin_addr.S_un.S_addr = inet_addr(to_c_string(host));
     servaddr.sin_port = htons(port);
 
     // connect the client socket to server socket
     if (connect(redis.socket, xx *servaddr, xx size_of(sockaddr_in)) != 0) {
-        print("connection with the server failed...\n");
+        log("Failed to connect to redis server (%:%)\n", host, port);
+        return false;
+    }
+    
+    log("Connected to redis server (%:%)..\n", host, port);
+    
+    resp : RESPMessage;
+    if password.count > 0 {
+        resp = redis_send(redis, "HELLO", 2, "AUTH", user, password);
+    } else {
+        resp = redis_send(redis, "HELLO", 2);
+    }
+    
+    if resp.type == .ERROR {
+        log("Redis handshake failed (%:%) - '%'!\n", host, port, resp.value.s, flags=.ERROR);
         return false;
     }
 
+    
+    log("Redis ready! (%:%)\n", host, port);
+    
     return true;
 }
 
 deinit :: (redis: *Redis) {
-    close(redis.socket);
+    close_and_reset(*redis.socket);
 }
 
+redis_select_db :: (redis: *Redis, db: int) -> bool {
+    ret, suc := redis_send(redis, "SELECT", db);
+    return suc;
+}
 
 redis_send :: (redis: *Redis, msg: .. Any) -> RESPMessage, bool {
     write(redis.socket, tprint("*%\r\n", msg.count));
@@ -63,11 +84,34 @@ redis_send :: (redis: *Redis, msg: .. Any) -> RESPMessage, bool {
     return resp, false;
 }
 
+redis_pop :: (redis: *Redis, list: string, blocking: bool=false) -> string, bool {
+    ret, suc := redis_send(redis, ifx blocking then "BLPOP" else "LPOP", list, 60);
+    
+    if ret.type == .ERROR return ret.value.s, false;
+    if ret.type == .NULL return "", false;
+    
+    if ret.type == .ARRAY {
+        if ret.value.a.count > 1 {
+            // index 0 is the name of the list we retrieved from...
+            result := ret.value.a[1].value.s;
+            
+            return result, true;
+        }
+    }
+    
+    return "", false;
+}
+
+redis_push :: (redis: *Redis, list: string, value: Any) -> string, bool {
+    ret, suc := redis_send(redis, "LPUSH", list, value);
+    if ret.type == .ERROR return ret.value.s, false;
+    if ret.type == .NULL return "", false;
+    return ret.value.s, true;
+}
 
 redis_info :: (redis: *Redis) {
     res := redis_send(redis, "INFO");
 }
-
 
 redis_set :: (redis: *Redis, key: string, value: Any, ex:=0, px:=0, nx:=false, _xx:=false, getset:=false) -> bool, RESPMessage {
     /* Options:
@@ -141,3 +185,12 @@ redis_setrange :: (redis: *Redis, key: string, start: int, value: Any) -> bool {
 
 #scope_file
 #import "Socket";
+
+write :: inline (fd: Socket, msg: string) -> s64 {
+    return send(fd, cast(*void) msg.data, xx msg.count, 0);
+}
+
+write :: inline (fd: Socket, buf: string, args: ..Any) -> s64 {
+    tmp := tprint(buf, ..args);
+    return send(fd, tmp.data, xx tmp.count, 0);
+}

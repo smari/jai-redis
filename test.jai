@@ -1,5 +1,5 @@
 #import "Basic";
-#import "Redis";
+#import,file "module.jai";
 
 is_equal :: (x: string, y: string, desc: string) {
     if (x == y) print(" [PASS] %\n", desc);

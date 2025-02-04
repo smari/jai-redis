@@ -24,17 +24,17 @@ init :: (redis: *Redis, host: string, port: u16, user: string = "default", passw
     memset(*servaddr, 0, size_of(sockaddr_in));
 
     // assign IP, PORT
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.S_un.S_addr = inet_addr(to_c_string(host));
-    servaddr.sin_port = htons(port);
+    server_address.sin_family = AF_INET;
+    #if OS == .WINDOWS {
+        server_address.sin_addr.S_un.S_addr = htonl(address);
+    } else {
+        server_address.sin_addr.s_addr = htonl(address);
 
     // connect the client socket to server socket
-    if (connect(redis.socket, xx *servaddr, xx size_of(sockaddr_in)) != 0) {
+    if (connect(redis.socket, xx *server_address, xx size_of(sockaddr_in)) != 0) {
         log("Failed to connect to redis server (%:%)\n", host, port);
         return false;
     }
-    
-    log("Connected to redis server (%:%)..\n", host, port);
     
     resp : RESPMessage;
     if password.count > 0 {
@@ -48,8 +48,6 @@ init :: (redis: *Redis, host: string, port: u16, user: string = "default", passw
         return false;
     }
 
-    
-    log("Redis ready! (%:%)\n", host, port);
     
     return true;
 }

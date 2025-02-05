@@ -122,7 +122,6 @@ resp_parse :: (socket: Socket) -> RESPMessage, bool {
     s : string;
     s.data = buf;
     s.count = n;
-    //print("RESP: >>>%<<<\n", s);
     //print("RESP: >>>%<<<\n\n\n", s);
 
     if !resp_parse_item(buf, *resp) {

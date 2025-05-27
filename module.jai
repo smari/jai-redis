@@ -20,16 +20,15 @@ init :: (redis: *Redis, host: string, port: u16, user: string = "default", passw
         return false;
     }
 
-    servaddr : sockaddr_in;
-    memset(*servaddr, 0, size_of(sockaddr_in));
+    server_address : sockaddr_in;
 
     // assign IP, PORT
     server_address.sin_family = AF_INET;
     #if OS == .WINDOWS {
         server_address.sin_addr.S_un.S_addr = htonl(address);
     } else {
-        server_address.sin_addr.s_addr = htonl(address);
-
+	server_address.sin_addr.s_addr = inet_addr(to_c_string(host));
+    }
     // connect the client socket to server socket
     if (connect(redis.socket, xx *server_address, xx size_of(sockaddr_in)) != 0) {
         log("Failed to connect to redis server (%:%)\n", host, port);
